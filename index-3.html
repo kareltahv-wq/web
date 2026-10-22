@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e1a22">
+<link rel="manifest" href="manifest.json">
+<title>Heater Planner</title>
+<style>
+:root {
+  --bg: #f4f7f9; --card: #ffffff; --text: #14212b; --muted: #5d6f7d;
+  --line: #dfe6eb; --accent: #0f766e; --accent-text: #ffffff;
+  --bar: #c4d0d8; --cheap: #0f766e; --on: #16a34a; --off: #64748b; --err: #b91c1c;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1a22; --card: #16252f; --text: #e8f0f5; --muted: #93a6b3;
+    --line: #243743; --accent: #2dd4bf; --accent-text: #052e2b;
+    --bar: #33505f; --cheap: #2dd4bf; --on: #4ade80; --off: #8aa0ae; --err: #f87171;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+body { padding: env(safe-area-inset-top) 16px calc(24px + env(safe-area-inset-bottom)); max-width: 560px; margin: 0 auto; }
+header { display: flex; align-items: center; justify-content: space-between; padding: 16px 0 8px; }
+h1 { font-size: 20px; margin: 0; }
+.icon-btn { background: none; border: 1px solid var(--line); color: var(--text); border-radius: 10px;
+  width: 44px; height: 44px; font-size: 20px; cursor: pointer; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; margin: 12px 0; }
+.card[hidden] { display: none; }
+.label { font-size: 13px; color: var(--muted); }
+.state { font-size: 34px; font-weight: 700; margin: 2px 0 12px; }
+.state.on { color: var(--on); } .state.off { color: var(--off); }
+button.big { width: 100%; min-height: 52px; border: 0; border-radius: 12px; background: var(--accent);
+  color: var(--accent-text); font-size: 17px; font-weight: 600; cursor: pointer; }
+button.big:disabled { opacity: .5; }
+button.ghost { background: none; color: var(--text); border: 1px solid var(--line); }
+.tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+.tab { flex: 1; min-height: 44px; border-radius: 10px; border: 1px solid var(--line); background: none;
+  color: var(--text); font-size: 16px; cursor: pointer; }
+.tab.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+.row { display: flex; gap: 12px; }
+.row > div { flex: 1; min-width: 0; }
+.val { font-size: 20px; font-weight: 650; }
+.val.sm { font-size: 16px; }
+.chart { display: flex; gap: 2px; align-items: flex-end; height: 150px; margin-top: 14px; }
+.bar { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; cursor: pointer; }
+.bar i { display: block; background: var(--bar); border-radius: 3px 3px 0 0; }
+.bar.cheap i { background: var(--cheap); }
+.bar.now i { outline: 2px solid var(--text); outline-offset: 1px; }
+.bar span { height: 16px; font-size: 10px; text-align: center; color: var(--muted); }
+.pick { min-height: 22px; margin-top: 6px; font-weight: 600; }
+.legend { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.legend b { color: var(--cheap); }
+.ctl { margin-top: 14px; }
+.ctl-head { display: flex; justify-content: space-between; align-items: center; }
+input[type=range] { width: 100%; accent-color: var(--accent); height: 32px; }
+input[type=text], input[type=password], input[type=number], select {
+  width: 100%; min-height: 44px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--text); font-size: 16px; }
+.switch { display: flex; align-items: center; justify-content: space-between; min-height: 44px; }
+.switch input { width: 24px; height: 24px; accent-color: var(--accent); }
+.status { font-size: 13px; color: var(--muted); min-height: 20px; margin: 8px 0; }
+.status.err { color: var(--err); }
+dialog { border: 1px solid var(--line); border-radius: 16px; background: var(--card); color: var(--text);
+  width: min(520px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow-y: auto; padding: 16px; }
+dialog::backdrop { background: rgba(0,0,0,.5); }
+dialog h2 { margin: 0 0 4px; font-size: 18px; }
+dialog h3 { margin: 18px 0 4px; font-size: 15px; }
+.field { margin: 12px 0; }
+.field label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+.btns { display: flex; gap: 8px; margin-top: 14px; }
+.hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Heater Planner</h1>
+  <button class="icon-btn" id="gear" aria-label="Settings">&#9881;</button>
+</header>
+
+<main>
+  <section class="card">
+    <div class="tabs">
+      <button class="tab active" id="tabToday" type="button">Today</button>
+      <button class="tab" id="tabTomorrow" type="button">Tomorrow</button>
+    </div>
+    <div class="row">
+      <div><div class="label">Now</div><div class="val" id="priceNow">&ndash;</div></div>
+      <div><div class="label">Average</div><div class="val" id="avg">&ndash;</div></div>
+      <div><div class="label">Low &ndash; high</div><div class="val sm" id="range">&ndash;</div></div>
+    </div>
+    <div class="chart" id="chart" aria-label="Hourly electricity prices"></div>
+    <div class="pick" id="pick"></div>
+    <div class="legend" id="legend"></div>
+    <div class="ctl">
+      <div class="ctl-head"><span>Cheapest hours to highlight</span><b id="hoursOut">6</b></div>
+      <input type="range" id="hours" min="1" max="23" step="1" value="6">
+    </div>
+    <div class="hint" id="srcNote"></div>
+  </section>
+
+  <section class="card" id="ctlCard" hidden>
+    <div class="label" id="entLabel">Water heater</div>
+    <div class="state" id="state">&ndash;</div>
+    <button class="big" id="toggle" disabled>Turn on</button>
+    <div class="row" style="margin-top:14px">
+      <div><div class="label">Plan says (now)</div><div class="val" id="planNow">&ndash;</div></div>
+    </div>
+    <div class="ctl">
+      <div class="ctl-head"><span>Also run below (c/kWh, 0 = off)</span></div>
+      <input type="number" id="ceiling" min="0" max="100" step="0.1" inputmode="decimal" value="0">
+    </div>
+    <div class="ctl switch">
+      <span>Auto mode <span class="label">(works while this app is open)</span></span>
+      <input type="checkbox" id="auto">
+    </div>
+  </section>
+
+  <section class="card" id="connectCard">
+    <div><b>Control your water heater</b></div>
+    <div class="hint">Optional. Connect your Home Assistant to switch a heater on the cheapest hours. The price graph works without it.</div>
+    <button class="big ghost" id="openSettings2" type="button" style="margin-top:12px">Connect Home Assistant</button>
+  </section>
+
+  <div class="status" id="status"></div>
+  <button class="big ghost" id="refresh" type="button">Refresh now</button>
+</main>
+
+<dialog id="settings">
+  <h2>Settings</h2>
+
+  <h3>Prices</h3>
+  <div class="field">
+    <label for="f-country">Price area</label>
+    <select id="f-country">
+      <option value="EE">Estonia</option>
+      <option value="FI">Finland</option>
+      <option value="LV">Latvia</option>
+      <option value="LT">Lithuania</option>
+    </select>
+  </div>
+  <div class="field">
+    <label for="f-vat">Add VAT (%) &ndash; 0 shows prices without VAT</label>
+    <input type="number" id="f-vat" min="0" max="100" step="0.1" inputmode="decimal" value="0">
+  </div>
+
+  <h3>Home Assistant (optional)</h3>
+  <div class="field">
+    <label for="f-url">Home Assistant address</label>
+    <input type="text" id="f-url" inputmode="url" autocapitalize="off" autocomplete="off" placeholder="http://homeassistant.local:8123">
+  </div>
+  <div class="field">
+    <label for="f-token">Long-lived access token</label>
+    <input type="password" id="f-token" autocomplete="off" placeholder="Profile > Security > Long-lived access tokens">
+    <div class="hint">Stored only on this device.</div>
+  </div>
+  <div class="btns"><button class="big ghost" id="connect" type="button">Connect &amp; load</button></div>
+  <div class="status" id="connStatus"></div>
+  <div class="field">
+    <label for="f-entity">Water heater switch</label>
+    <select id="f-entity"><option value="">Connect first</option></select>
+  </div>
+  <div class="field">
+    <label for="f-entry">Nord Pool config entry ID (only a backup price source)</label>
+    <input type="text" id="f-entry" autocomplete="off" placeholder="Found automatically if possible">
+    <div class="btns"><button class="big ghost" id="findEntry" type="button">Find Nord Pool ID</button></div>
+  </div>
+
+  <div class="btns">
+    <button class="big ghost" id="closeSettings" type="button">Cancel</button>
+    <button class="big" id="saveSettings" type="button">Save</button>
+  </div>
+</dialog>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const pad = (n) => String(n).padStart(2, '0');
+  const DEF = { country: 'EE', vat: 0, hours: 6, ceiling: 0, auto: false, url: '', token: '', entity: '', entry: '' };
+
+  let cfg = { ...DEF };
+  try { cfg = { ...DEF, ...JSON.parse(localStorage.getItem('hp') || '{}') }; } catch (e) { /* ignore */ }
+  const save = () => { try { localStorage.setItem('hp', JSON.stringify(cfg)); } catch (e) { /* ignore */ } };
+
+  let raw = {};            // { 'YYYY-MM-DD': [{h, eur}] }  eur = EUR/MWh, hourly average
+  let pricesAt = 0;
+  let source = '';
+  let view = 'today';
+  let heaterOn = null;
+  let ticking = false;
+
+  /* ---------- time helpers (market time, same for every viewer) ---------- */
+  const TZ = 'Europe/Tallinn';
+  const tzFmt = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' });
+  function tzParts(ms) {
+    const o = {};
+    for (const p of tzFmt.formatToParts(new Date(ms))) o[p.type] = p.value;
+    return { date: o.year + '-' + o.month + '-' + o.day, hour: Number(o.hour) % 24 };
+  }
+  function addDays(dateStr, n) {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+  }
+  const todayKey = () => tzParts(Date.now()).date;
+  const hasHA = () => !!(cfg.url && cfg.token && cfg.entity);
+
+  function setStatus(msg, err) {
+    const el = $('#status');
+    el.textContent = msg || '';
+    el.className = 'status' + (err ? ' err' : '');
+  }
+
+  /* ---------- Home Assistant ---------- */
+  async function ha(path, opts = {}) {
+    const { raw: wantRaw, ...init } = opts;
+    const base = cfg.url.replace(/\/+$/, '');
+    const res = await fetch(base + path, {
+      ...init,
+      headers: { 'Authorization': 'Bearer ' + cfg.token, 'Content-Type': 'application/json', ...(init.headers || {}) },
+    });
+    if (!res.ok) {
+      let detail = res.status + ' ' + res.statusText;
+      if (res.status === 401) detail = 'Token rejected (401). Create a new long-lived access token.';
+      if (res.status === 403) detail = 'Not allowed (403). Use a token from an admin user.';
+      throw new Error(detail);
+    }
+    const text = await res.text();
+    if (wantRaw) return text;
+    return text ? JSON.parse(text) : null;
+  }
+  const netHint = (e) => e.message + (e instanceof TypeError ? ' (cannot reach it; check the address, your network, or an HTTPS/HTTP mismatch)' : '');
+
+  async function findEntry(states) {
+    const notes = [];
+    try {
+      const entries = await ha('/api/config/config_entries/entry?domain=nordpool');
+      if (entries && entries.length) return { id: entries[0].entry_id, notes };
+      notes.push('no Nord Pool entry in the config list');
+    } catch (e) {
+      notes.push('config list: ' + e.message);
+    }
+    const cands = (states || []).filter((s) =>
+      s.entity_id.startsWith('sensor.') && /^[a-z0-9_.]+$/.test(s.entity_id) &&
+      /nord.?pool/i.test(s.entity_id + ' ' + ((s.attributes && s.attributes.friendly_name) || '')));
+    if (!cands.length) notes.push('no Nord Pool sensors found');
+    for (const c of cands.slice(0, 3)) {
+      try {
+        const out = (await ha('/api/template', {
+          method: 'POST', raw: true,
+          body: JSON.stringify({ template: "{{ config_entry_id('" + c.entity_id + "') }}" }),
+        })).trim();
+        if (/^[0-9A-Za-z]{20,}$/.test(out)) return { id: out, notes };
+        notes.push(c.entity_id + ': template gave "' + out.slice(0, 40) + '"');
+      } catch (e) {
+        notes.push('template: ' + e.message);
+        break;
+      }
+    }
+    return { id: '', notes };
+  }
+
+  async function refreshState() {
+    const s = await ha('/api/states/' + encodeURIComponent(cfg.entity));
+    heaterOn = s.state === 'on';
+    $('#entLabel').textContent = (s.attributes && s.attributes.friendly_name) || cfg.entity;
+    if (s.state === 'unavailable') throw new Error('the switch is unavailable in Home Assistant');
+  }
+  async function setHeater(on) {
+    await ha('/api/services/switch/' + (on ? 'turn_on' : 'turn_off'), {
+      method: 'POST', body: JSON.stringify({ entity_id: cfg.entity }),
+    });
+    await refreshState();
+  }
+
+  /* ---------- prices ---------- */
+  async function loadPublic() {
+    const start = new Date(Date.now() - 30 * 3600e3).toISOString();
+    const end = new Date(Date.now() + 50 * 3600e3).toISOString();
+    let res;
+    try {
+      res = await fetch('https://dashboard.elering.ee/api/nps/price?start=' + encodeURIComponent(start) + '&end=' + encodeURIComponent(end));
+    } catch (e) {
+      throw new Error('could not reach the price service (offline or blocked)');
+    }
+    if (!res.ok) throw new Error('the price service answered ' + res.status);
+    const j = await res.json();
+    const rows = j && j.data && j.data[cfg.country.toLowerCase()];
+    if (!rows || !rows.length) throw new Error('no prices returned for ' + cfg.country);
+    return rows.map((r) => ({ ms: Number(r.timestamp) * 1000, eur: Number(r.price) }));
+  }
+  async function loadViaHA() {
+    const res = await ha('/api/services/nordpool/get_prices_for_date?return_response', {
+      method: 'POST',
+      body: JSON.stringify({ config_entry: cfg.entry, date: todayKey(), areas: cfg.country, currency: 'EUR' }),
+    });
+    const slots = res && res.service_response && res.service_response[cfg.country];
+    if (!slots || !slots.length) throw new Error('Home Assistant returned no prices for ' + cfg.country);
+    return slots.map((s) => ({ ms: Date.parse(s.start), eur: Number(s.price) }));
+  }
+  function bucket(rows) {
+    const acc = {};
+    for (const r of rows) {
+      if (!isFinite(r.ms) || !isFinite(r.eur)) continue;
+      const p = tzParts(r.ms);
+      const day = (acc[p.date] = acc[p.date] || {});
+      const o = (day[p.hour] = day[p.hour] || { sum: 0, n: 0 });
+      o.sum += r.eur; o.n += 1;
+    }
+    const out = {};
+    for (const [date, hrs] of Object.entries(acc)) {
+      out[date] = Object.entries(hrs).map(([h, o]) => ({ h: Number(h), eur: o.sum / o.n })).sort((a, b) => a.h - b.h);
+    }
+    return out;
+  }
+  async function loadPrices() {
+    let rows, via = 'Nord Pool day-ahead via Elering';
+    try {
+      rows = await loadPublic();
+    } catch (e) {
+      if (!(cfg.url && cfg.token && cfg.entry)) throw e;
+      rows = await loadViaHA();
+      via = 'Nord Pool via your Home Assistant (backup)';
+    }
+    raw = bucket(rows);
+    pricesAt = Date.now();
+    source = via;
+  }
+  function needFetch() {
+    const t = todayKey();
+    const age = Date.now() - pricesAt;
+    if (!raw[t] || raw[t].length < 20) return age > 60e3;
+    if (age > 6 * 3600e3) return true;
+    if (!raw[addDays(t, 1)] && tzParts(Date.now()).hour >= 14 && age > 10 * 60e3) return true;
+    return false;
+  }
+  const dayList = (date) => (raw[date] || []).map((x) => ({ h: x.h, price: (x.eur / 10) * (1 + (Number(cfg.vat) || 0) / 100) }));
+
+  /* ---------- plan ---------- */
+  const cheapSet = (list) => new Set([...list].sort((a, b) => a.price - b.price).slice(0, cfg.hours).map((x) => x.h));
+  function wantOn() {
+    const list = dayList(todayKey());
+    if (!list.length) return null;
+    const nowH = tzParts(Date.now()).hour;
+    const cur = list.find((x) => x.h === nowH);
+    if (!cur) return null;
+    return cheapSet(list).has(nowH) || (cfg.ceiling > 0 && cur.price < cfg.ceiling);
+  }
+  function ranges(list) {
+    const sorted = [...list].sort((a, b) => a - b);
+    const out = [];
+    let start = null, prev = null;
+    for (const h of sorted) {
+      if (start === null) { start = h; prev = h; continue; }
+      if (h === prev + 1) { prev = h; continue; }
+      out.push([start, prev]); start = h; prev = h;
+    }
+    if (start !== null) out.push([start, prev]);
+    return out.map(([a, b]) => pad(a) + ':00–' + pad((b + 1) % 24) + ':00').join(', ');
+  }
+
+  /* ---------- rendering ---------- */
+  function renderPrices() {
+    const day = view === 'today' ? todayKey() : addDays(todayKey(), 1);
+    const list = dayList(day);
+    const chart = $('#chart');
+    chart.textContent = '';
+    $('#pick').textContent = '';
+    $('#tabToday').className = 'tab' + (view === 'today' ? ' active' : '');
+    $('#tabTomorrow').className = 'tab' + (view === 'tomorrow' ? ' active' : '');
+    const vat = Number(cfg.vat) || 0;
+    $('#srcNote').textContent = 'Times in Estonian time (EET/EEST). ' + (source ? source + ', ' : '') + (vat ? 'incl. ' + vat + '% VAT.' : 'excl. VAT.');
+    const legend = $('#legend');
+    legend.textContent = '';
+    if (!list.length) {
+      $('#priceNow').textContent = '–'; $('#avg').textContent = '–'; $('#range').textContent = '–';
+      legend.textContent = view === 'tomorrow'
+        ? "Tomorrow's prices are usually published around 14:00 Estonian time."
+        : 'No prices loaded yet.';
+      renderPlan();
+      return;
+    }
+    const nowH = tzParts(Date.now()).hour;
+    const cheap = cheapSet(list);
+    const prices = list.map((x) => x.price);
+    const max = Math.max(...prices, 0.01);
+    const min = Math.min(...prices, 0);
+    const span = max - min || 1;
+    for (const x of list) {
+      const bar = document.createElement('div');
+      bar.className = 'bar' + (cheap.has(x.h) ? ' cheap' : '') + (view === 'today' && x.h === nowH ? ' now' : '');
+      const fill = document.createElement('i');
+      fill.style.height = Math.max(4, ((x.price - min) / span) * 88) + '%';
+      const label = document.createElement('span');
+      label.textContent = x.h % 3 === 0 ? pad(x.h) : '';
+      bar.append(fill, label);
+      bar.addEventListener('click', () => {
+        $('#pick').textContent = pad(x.h) + ':00–' + pad((x.h + 1) % 24) + ':00  ·  ' + x.price.toFixed(1) + ' c/kWh';
+      });
+      chart.append(bar);
+    }
+    const cur = list.find((x) => x.h === nowH);
+    $('#priceNow').textContent = view === 'today' && cur ? cur.price.toFixed(1) + ' c' : '–';
+    $('#avg').textContent = (prices.reduce((a, b) => a + b, 0) / prices.length).toFixed(1) + ' c';
+    $('#range').textContent = Math.min(...prices).toFixed(1) + ' – ' + Math.max(...prices).toFixed(1);
+    const b = document.createElement('b');
+    b.textContent = 'Cheapest ' + cfg.hours + ' h: ';
+    legend.append(b, document.createTextNode(ranges([...cheap])));
+    renderPlan();
+  }
+
+  function renderPlan() {
+    const w = wantOn();
+    $('#planNow').textContent = w === null ? '–' : (w ? 'ON' : 'OFF');
+  }
+
+  function renderControls() {
+    const on = hasHA();
+    $('#ctlCard').hidden = !on;
+    $('#connectCard').hidden = on;
+    if (!on) return;
+    const el = $('#state');
+    const btn = $('#toggle');
+    if (heaterOn === null) { el.textContent = '–'; el.className = 'state'; btn.disabled = true; return; }
+    el.textContent = heaterOn ? 'ON' : 'OFF';
+    el.className = 'state ' + (heaterOn ? 'on' : 'off');
+    btn.textContent = heaterOn ? 'Turn off' : 'Turn on';
+    btn.disabled = false;
+  }
+
+  /* ---------- refresh loop ---------- */
+  async function tick(force) {
+    if (ticking) return;
+    ticking = true;
+    const msgs = [];
+    let err = false;
+    try {
+      if (force || needFetch()) {
+        try { await loadPrices(); }
+        catch (e) { msgs.push('Prices: ' + e.message); err = true; }
+      }
+      renderPrices();
+      renderControls();
+      if (hasHA()) {
+        try {
+          await refreshState();
+          renderControls();
+          const w = wantOn();
+          if (cfg.auto && w !== null && heaterOn !== null && w !== heaterOn) {
+            await setHeater(w);
+            renderControls();
+            msgs.push('Auto: switched ' + (w ? 'ON' : 'OFF') + ' at ' + pad(new Date().getHours()) + ':' + pad(new Date().getMinutes()));
+          }
+        } catch (e) {
+          msgs.push('Home Assistant: ' + netHint(e)); err = true;
+        }
+      }
+      if (!msgs.length) msgs.push('Updated ' + pad(new Date().getHours()) + ':' + pad(new Date().getMinutes()) + (cfg.auto && hasHA() ? ' – auto mode on' : ''));
+      setStatus(msgs.join(' · '), err);
+    } finally {
+      ticking = false;
+    }
+  }
+
+  /* ---------- settings ---------- */
+  function fillSettings() {
+    $('#f-country').value = cfg.country;
+    $('#f-vat').value = cfg.vat;
+    $('#f-url').value = cfg.url;
+    $('#f-token').value = cfg.token;
+    $('#f-entry').value = cfg.entry;
+    const sel = $('#f-entity');
+    if (cfg.entity) {
+      const o = document.createElement('option');
+      o.value = cfg.entity; o.textContent = cfg.entity;
+      sel.textContent = ''; sel.append(o);
+    }
+    sel.value = cfg.entity;
+    $('#connStatus').textContent = '';
+    $('#connStatus').className = 'status';
+  }
+  function readConn() {
+    let url = $('#f-url').value.trim();
+    if (url && !/^https?:\/\//i.test(url)) url = 'http://' + url;
+    cfg.url = url.replace(/\/+$/, '');
+    cfg.token = $('#f-token').value.trim();
+  }
+
+  async function connect() {
+    const st = $('#connStatus');
+    readConn();
+    st.className = 'status'; st.textContent = 'Connecting…';
+    try {
+      await ha('/api/');
+      const states = await ha('/api/states');
+      const sel = $('#f-entity');
+      sel.textContent = '';
+      const none = document.createElement('option');
+      none.value = ''; none.textContent = 'Choose a switch';
+      sel.append(none);
+      states.filter((s) => s.entity_id.startsWith('switch.')).sort((a, b) => a.entity_id.localeCompare(b.entity_id)).forEach((s) => {
+        const o = document.createElement('option');
+        o.value = s.entity_id;
+        o.textContent = ((s.attributes && s.attributes.friendly_name) || s.entity_id) + ' (' + s.entity_id + ')';
+        sel.append(o);
+      });
+      sel.value = cfg.entity;
+      let msg = 'Connected. ' + (sel.options.length - 1) + ' switches found.';
+      const found = await findEntry(states);
+      if (found.id) { $('#f-entry').value = found.id; msg += ' Nord Pool ID found: ' + found.id; }
+      else msg += ' Nord Pool ID not found (' + found.notes.join('; ') + '). It is only needed as a backup price source.';
+      st.textContent = msg;
+    } catch (e) {
+      st.className = 'status err';
+      st.textContent = 'Error: ' + netHint(e);
+    }
+  }
+
+  async function findEntryClick() {
+    const st = $('#connStatus');
+    readConn();
+    st.className = 'status'; st.textContent = 'Looking…';
+    try {
+      const states = await ha('/api/states');
+      const found = await findEntry(states);
+      if (found.id) { $('#f-entry').value = found.id; st.textContent = 'Found: ' + found.id; }
+      else { st.className = 'status err'; st.textContent = 'Not found: ' + found.notes.join('; '); }
+    } catch (e) {
+      st.className = 'status err'; st.textContent = 'Error: ' + netHint(e);
+    }
+  }
+
+  function saveSettings() {
+    readConn();
+    cfg.country = $('#f-country').value || 'EE';
+    cfg.vat = Math.min(100, Math.max(0, Number($('#f-vat').value) || 0));
+    cfg.entity = $('#f-entity').value;
+    cfg.entry = $('#f-entry').value.trim();
+    save();
+    raw = {}; pricesAt = 0; heaterOn = null;
+    $('#settings').close();
+    renderControls();
+    tick(true);
+  }
+
+  /* ---------- wiring ---------- */
+  const openSettings = () => { fillSettings(); $('#settings').showModal(); };
+  $('#gear').addEventListener('click', openSettings);
+  $('#openSettings2').addEventListener('click', openSettings);
+  $('#closeSettings').addEventListener('click', () => $('#settings').close());
+  $('#connect').addEventListener('click', connect);
+  $('#findEntry').addEventListener('click', findEntryClick);
+  $('#saveSettings').addEventListener('click', saveSettings);
+  $('#refresh').addEventListener('click', () => tick(true));
+  $('#tabToday').addEventListener('click', () => { view = 'today'; renderPrices(); });
+  $('#tabTomorrow').addEventListener('click', () => { view = 'tomorrow'; renderPrices(); });
+  $('#toggle').addEventListener('click', async () => {
+    try {
+      $('#toggle').disabled = true;
+      await setHeater(!heaterOn);
+      renderControls();
+      setStatus('Switched ' + (heaterOn ? 'ON' : 'OFF') + ' manually.');
+    } catch (e) { setStatus('Error: ' + netHint(e), true); renderControls(); }
+  });
+  $('#hours').addEventListener('input', (e) => {
+    cfg.hours = Number(e.target.value); $('#hoursOut').textContent = cfg.hours; save(); renderPrices();
+  });
+  $('#hours').addEventListener('change', () => tick(false));
+  $('#ceiling').addEventListener('change', (e) => {
+    cfg.ceiling = Math.max(0, Number(e.target.value) || 0); save(); renderPlan(); tick(false);
+  });
+  $('#auto').addEventListener('change', (e) => { cfg.auto = e.target.checked; save(); tick(false); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(false); });
+
+  $('#hours').value = cfg.hours; $('#hoursOut').textContent = cfg.hours;
+  $('#ceiling').value = cfg.ceiling; $('#auto').checked = cfg.auto;
+  renderControls();
+  tick(true);
+  setInterval(() => tick(false), 60000);
+
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>
